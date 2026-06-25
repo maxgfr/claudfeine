@@ -21,7 +21,7 @@
 
 set -eu
 
-FEINE_VERSION="0.0.0" # injected on release by .version-hook.sh
+FEINE_VERSION="1.0.0" # injected on release by .version-hook.sh
 
 # ---------------------------------------------------------------------------
 # Resolve which agent we wrap, from the invoked name (FEINE_TARGET overrides).
