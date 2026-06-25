@@ -97,12 +97,6 @@ claudfeine --feine-help            # print wrapper help
 (the `--feine-` namespace can't collide with the agent's flags). Everything else is passed
 through unchanged.
 
-## ⚠️ It blocks sleep, not a power cut
-
-`claudfeine` stops your machine from *sleeping*, but it can't stop a power outage, a drained
-battery, or a forced reboot. On long unattended runs, **make Claude commit its progress**
-regularly so nothing is lost if the machine goes down.
-
 ## Uninstall
 
 ```sh
