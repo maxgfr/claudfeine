@@ -1,0 +1,135 @@
+#!/bin/sh
+# claudfeine ☕ — run Claude Code (or Codex) "caffeinated".
+#
+# Keeps the machine awake (display + system) for EXACTLY the duration of the
+# wrapped session, then lets normal sleep behaviour return on its own — whether
+# the session exits cleanly or crashes. No permanent system setting is changed.
+#
+# It is a transparent pass-through: every argument is forwarded to the underlying
+# agent untouched (e.g. `claudfeine --continue`, `claudfeine -p "..."`).
+#
+# Which agent is wrapped is decided by the name the script is invoked as:
+#   claudfeine -> claude   codexfeine -> codex   (override with FEINE_TARGET).
+#
+# Mechanisms (zero external dependencies, all OS built-ins):
+#   macOS  -> caffeinate -dims <agent>           (assertion lasts the child's life)
+#   Linux  -> systemd-inhibit --mode=block ...   (falls back to gnome-session-inhibit,
+#                                                  then to a plain run with a warning)
+#   Windows is handled by the PowerShell wrappers in windows/ (SetThreadExecutionState).
+#
+# https://github.com/maxgfr/claudfeine — MIT License.
+
+set -eu
+
+FEINE_VERSION="0.0.0" # injected on release by .version-hook.sh
+
+# ---------------------------------------------------------------------------
+# Resolve which agent we wrap, from the invoked name (FEINE_TARGET overrides).
+# ---------------------------------------------------------------------------
+self=${0##*/}
+case "${FEINE_TARGET:-$self}" in
+  codexfeine | codex)
+    target=codex
+    pkg="@openai/codex"
+    ;;
+  *)
+    target=claude
+    pkg="@anthropic-ai/claude-code"
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Tiny output helpers (colour only on a terminal).
+# ---------------------------------------------------------------------------
+if [ -t 2 ]; then
+  c_bold='\033[1m'
+  c_red='\033[31m'
+  c_yellow='\033[33m'
+  c_reset='\033[0m'
+else
+  c_bold=''
+  c_red=''
+  c_yellow=''
+  c_reset=''
+fi
+
+warn() { printf "${c_yellow}%s:${c_reset} %s\n" "$self" "$*" >&2; }
+
+print_help() {
+  cat <<EOF
+${self} ☕ — run ${target} caffeinated (no sleep while it runs).
+
+Usage:
+  ${self} [${target} arguments...]      run ${target}, keeping the machine awake
+  ${self} --feine-version               print the wrapper version and exit
+  ${self} --feine-help                  print this help and exit
+
+Every other argument is passed straight through to ${target}.
+Example:  ${self} --continue        ${self} -p "summarise this repo"
+
+It prevents sleep, NOT a power cut — commit your progress on long tasks.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Own flags (the only two we intercept; the --feine- namespace can't collide
+# with claude/codex flags). Handled before the agent check so they work even
+# when the agent isn't installed.
+# ---------------------------------------------------------------------------
+case "${1:-}" in
+  --feine-version)
+    printf '%s (caffeinated %s wrapper) %s\n' "$self" "$target" "$FEINE_VERSION"
+    exit 0
+    ;;
+  --feine-help)
+    print_help
+    exit 0
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# The agent must be installed.
+# ---------------------------------------------------------------------------
+if ! command -v "$target" >/dev/null 2>&1; then
+  printf "${c_red}%s:${c_reset} ${c_bold}%s${c_reset} is not installed or not on your PATH.\n" "$self" "$target" >&2
+  printf "${c_red}%s:${c_reset} Install it with:  ${c_bold}npm install -g %s${c_reset}\n" "$self" "$pkg" >&2
+  exit 127
+fi
+
+# ---------------------------------------------------------------------------
+# Wrap the agent in an OS-appropriate keep-awake assertion, then `exec` so the
+# wrapper's exit status is the agent's, and the assertion is released the moment
+# the agent process ends (normal exit, crash, or signal).
+# ---------------------------------------------------------------------------
+os=$(uname -s 2>/dev/null || echo unknown)
+why="${target} session running (claudfeine)"
+
+case "$os" in
+  Darwin)
+    # -d display  -i idle system  -m disk  -s system sleep (AC). Holds for the
+    # utility's lifetime, then releases automatically.
+    exec caffeinate -dims "$target" "$@"
+    ;;
+  Linux)
+    if command -v systemd-inhibit >/dev/null 2>&1; then
+      exec systemd-inhibit \
+        --what=sleep:idle \
+        --who="$self" \
+        --why="$why" \
+        --mode=block \
+        "$target" "$@"
+    elif command -v gnome-session-inhibit >/dev/null 2>&1; then
+      exec gnome-session-inhibit \
+        --inhibit suspend:idle \
+        --reason "$why" \
+        "$target" "$@"
+    else
+      warn "neither systemd-inhibit nor gnome-session-inhibit found — sleep will NOT be blocked."
+      exec "$target" "$@"
+    fi
+    ;;
+  *)
+    warn "unsupported OS '${os}' — running without sleep inhibition (use the PowerShell wrapper on Windows)."
+    exec "$target" "$@"
+    ;;
+esac
