@@ -6,7 +6,7 @@
 #
 # https://github.com/maxgfr/claudfeine — MIT License.
 
-$script:FeineVersion = '1.0.1' # injected on release by .version-hook.sh
+$script:FeineVersion = '1.1.0' # injected on release by .version-hook.sh
 
 function Invoke-Feine {
     [CmdletBinding()]
