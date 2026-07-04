@@ -24,8 +24,8 @@ duration of the session, then releasing the keep-awake assertion automatically.
 ## Conventions
 
 - Pure POSIX `sh` (no bashisms). Keep `shellcheck -s sh claudfeine test.sh` clean.
-- The only flags the wrapper interprets are `--feine-version` / `--feine-help`; everything
-  else must pass through untouched.
+- The only flags the wrapper interprets are `--feine-version` / `--feine-help` /
+  `--feine-install-alias`; everything else must pass through untouched.
 - `FEINE_VERSION` (in `claudfeine`) and `$script:FeineVersion` (in `windows/_feine.ps1`) are
   stamped on release by `.version-hook.sh` — don't hand-edit them.
 - Commits follow Conventional Commits; releases are automated by semantic-release

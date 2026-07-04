@@ -83,6 +83,10 @@ function codexfeine { & "C:\path\to\claudfeine\windows\codexfeine.ps1" @args }
 > The wrapper forces UTF-8 output so the agent's output renders correctly even on the older
 > Windows PowerShell 5.1.
 
+> `--feine-install-alias` is macOS/Linux only. On Windows, invoke `claudfeine` / `codexfeine`
+> directly — aliasing the agent name to a PowerShell profile function would recurse back into the
+> wrapper.
+
 ## Usage
 
 ```sh
@@ -91,11 +95,41 @@ codexfeine [codex arguments...]    # run Codex, keeping the machine awake
 
 claudfeine --feine-version         # print the wrapper version
 claudfeine --feine-help            # print wrapper help
+claudfeine --feine-install-alias   # alias claude→claudfeine (+ codex→codexfeine) in your shell rc
 ```
 
-`--feine-version` and `--feine-help` are the **only** two flags the wrapper interprets
-(the `--feine-` namespace can't collide with the agent's flags). Everything else is passed
-through unchanged.
+`--feine-version`, `--feine-help`, and `--feine-install-alias` are the **only** flags the wrapper
+interprets (the `--feine-` namespace can't collide with the agent's flags). Everything else is
+passed through unchanged.
+
+## Make `claude` always caffeinated
+
+Prefer not to type the `claudfeine` prefix? Add a shell alias so `claude` *is* the caffeinated
+wrapper (and `codex` is `codexfeine`):
+
+```sh
+claudfeine --feine-install-alias
+```
+
+It appends — idempotently, and without touching any alias you already have —
+
+```sh
+alias claude='claudfeine'
+alias codex='codexfeine'
+```
+
+to your shell's rc file (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`, auto-detected
+from `$SHELL`). Restart your shell (or `source` the file) and `claude` keeps the machine awake for
+the whole session. Only the aliases whose wrapper is actually on your `PATH` are written.
+
+> **Why an alias and not a program named `claude`?** An alias only affects what *you* type at an
+> interactive prompt. When the wrapper then runs `claude` internally, the shell isn't involved, so
+> it resolves the real `claude` binary — no loop. A file literally named `claude` ahead of the real
+> one on your `PATH` would make the wrapper call itself forever.
+
+For a shell it doesn't recognise, it prints the two `alias` lines so you can paste them into your
+startup file yourself. On **Windows** the helper isn't available — keep calling `claudfeine` /
+`codexfeine` directly (see the Windows section above).
 
 ## Uninstall
 

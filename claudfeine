@@ -63,6 +63,7 @@ Usage:
   ${self} [${target} arguments...]      run ${target}, keeping the machine awake
   ${self} --feine-version               print the wrapper version and exit
   ${self} --feine-help                  print this help and exit
+  ${self} --feine-install-alias         alias claude->claudfeine, codex->codexfeine in your shell rc
 
 Every other argument is passed straight through to ${target}.
 Example:  ${self} --continue        ${self} -p "summarise this repo"
@@ -72,9 +73,70 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Own flags (the only two we intercept; the --feine- namespace can't collide
-# with claude/codex flags). Handled before the agent check so they work even
-# when the agent isn't installed.
+# --feine-install-alias: teach the interactive shell that `claude` means
+# `claudfeine` (and `codex` means `codexfeine`), so every session is caffeinated
+# without the prefix. We write shell *aliases* (not a PATH shim literally named
+# `claude`): an alias lives only in the interactive shell, so the wrapper's own
+# internal `claude` call still resolves the real binary and never recurses.
+# ---------------------------------------------------------------------------
+
+# Append `alias <name>='<wrapper>'` to the rc file — unless <wrapper> isn't on
+# PATH, or an alias for <name> already exists (we never clobber the user's). A
+# one-time header comment is written before the first alias; `alias_added` counts.
+add_alias() { # name wrapper rc
+  command -v "$2" >/dev/null 2>&1 || return 0
+  if [ -f "$3" ] && grep -Eq "^[[:space:]]*alias[[:space:]]+$1=" "$3"; then
+    warn "an alias for '$1' already exists in $3 — leaving it untouched."
+    return 0
+  fi
+  if [ "$alias_added" -eq 0 ]; then
+    printf '\n# Added by claudfeine — run your agent caffeinated (claudfeine --feine-help).\n' >>"$3"
+  fi
+  printf "alias %s='%s'\n" "$1" "$2" >>"$3"
+  printf '%s: added  alias %s=%s  ->  %s\n' "$self" "$1" "$2" "$3"
+  alias_added=$((alias_added + 1))
+}
+
+install_alias() {
+  # The aliases point at claudfeine/codexfeine, so at least one must be on PATH.
+  if ! command -v claudfeine >/dev/null 2>&1 && ! command -v codexfeine >/dev/null 2>&1; then
+    warn "neither claudfeine nor codexfeine is on your PATH — install it first (see the README), then re-run."
+    exit 1
+  fi
+
+  # Pick the rc file from the interactive shell (FEINE_SHELL overrides, for tests).
+  shell=${FEINE_SHELL:-${SHELL:-}}
+  case "${shell##*/}" in
+    zsh) rc="$HOME/.zshrc" ;;
+    bash) rc="$HOME/.bashrc" ;;
+    fish) rc="$HOME/.config/fish/config.fish" ;;
+    *)
+      warn "couldn't detect a supported shell (zsh/bash/fish) from '${shell:-unset}'."
+      printf '%s: add these lines to your shell startup file yourself:\n' "$self" >&2
+      if command -v claudfeine >/dev/null 2>&1; then printf "  alias claude='claudfeine'\n"; fi
+      if command -v codexfeine >/dev/null 2>&1; then printf "  alias codex='codexfeine'\n"; fi
+      exit 0
+      ;;
+  esac
+
+  mkdir -p "$(dirname "$rc")" 2>/dev/null || true
+
+  alias_added=0
+  add_alias claude claudfeine "$rc"
+  add_alias codex codexfeine "$rc"
+
+  if [ "$alias_added" -gt 0 ]; then
+    printf '%s: restart your shell or run  . %s  to activate.\n' "$self" "$rc"
+  else
+    printf '%s: nothing to add — the aliases are already in %s.\n' "$self" "$rc"
+  fi
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Own flags (the three we intercept; the --feine- namespace can't collide with
+# claude/codex flags). Handled before the agent check so they work even when the
+# agent isn't installed.
 # ---------------------------------------------------------------------------
 case "${1:-}" in
   --feine-version)
@@ -84,6 +146,9 @@ case "${1:-}" in
   --feine-help)
     print_help
     exit 0
+    ;;
+  --feine-install-alias)
+    install_alias
     ;;
 esac
 

@@ -111,6 +111,40 @@ eq "passthrough: exit 0 forwarded" 0 "$RC"
 run env PATH="$bin:/usr/bin:/bin" STUB_EXIT=42 "$SCRIPT" hi
 eq "passthrough: exit 42 forwarded" 42 "$RC"
 
+# --- 7. install-alias: write shell aliases to the detected rc file ----------
+# `codexfeine` was symlinked in section 2; add `claudfeine` so both alias
+# targets resolve via `command -v` on the hermetic PATH.
+ln -s "$SCRIPT" "$bin/claudfeine"
+home="$tmp/home"
+mkdir -p "$home"
+
+run env PATH="$bin:/usr/bin:/bin" HOME="$home" FEINE_SHELL=zsh "$SCRIPT" --feine-install-alias
+eq "install-alias: exit 0" 0 "$RC"
+zrc=$(cat "$home/.zshrc")
+contains "install-alias: writes claude alias" "alias claude='claudfeine'" "$zrc"
+contains "install-alias: writes codex alias" "alias codex='codexfeine'" "$zrc"
+
+# second run is idempotent: no duplicate claude alias, no clobber
+run env PATH="$bin:/usr/bin:/bin" HOME="$home" FEINE_SHELL=zsh "$SCRIPT" --feine-install-alias
+n=$(grep -c "alias claude=" "$home/.zshrc")
+eq "install-alias: idempotent (one claude alias)" 1 "$n"
+
+# unrecognised shell: print the alias lines, write no file
+home2="$tmp/home2"
+mkdir -p "$home2"
+run env PATH="$bin:/usr/bin:/bin" HOME="$home2" FEINE_SHELL=tcsh "$SCRIPT" --feine-install-alias
+eq "install-alias: unknown shell exit 0" 0 "$RC"
+contains "install-alias: unknown shell prints manual line" "alias claude='claudfeine'" "$OUT"
+
+# neither wrapper on PATH: refuse with a hint, write nothing
+run env PATH="/usr/bin:/bin" HOME="$home2" FEINE_SHELL=zsh "$SCRIPT" --feine-install-alias
+eq "install-alias: no wrapper on PATH -> exit 1" 1 "$RC"
+contains "install-alias: no-wrapper hint" "on your PATH" "$OUT"
+
+# help advertises the new command
+run "$SCRIPT" --feine-help
+contains "help: lists --feine-install-alias" "--feine-install-alias" "$OUT"
+
 # --- summary ----------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
